@@ -8,56 +8,56 @@ export class CdkCloudfrontStack extends cdk.Stack {
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // The code that defines your stack goes here
-    const sourceBucket = new s3.Bucket(this, 'bucket', {
-      bucketName: 'cloudfront-test-source',
+    // CloudFront オリジン用のS3バケットを作成する
+    const originBucket = new s3.Bucket(this, 'cdk-cloudfront-bucket', {
+      // バケット名
+      bucketName: 'cdk-cloudfront-bucket',
+      // CDKスタック削除時の挙動(スタック削除時にバケットも削除する)
       removalPolicy: cdk.RemovalPolicy.DESTROY
+    })
+
+    // CloudFront で設定する オリジンアクセスアイデンティティ を作成する
+    const oai = new cloudfront.OriginAccessIdentity(this, 'cdk-cloudfront-oai', {
+        comment: 's3 access.'
+    })
+
+    // S3バケットポリシーで、CloudFrontのオリジンアクセスアイデンティティを許可する
+    const policy = new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ['s3:GetObject'],
+      principals: [new iam.CanonicalUserPrincipal(oai.cloudFrontOriginAccessIdentityS3CanonicalUserId)],
+      resources: [
+        originBucket.bucketArn + '/*'
+      ]
+    });
+    originBucket.addToResourcePolicy(policy)
+
+    // CloudFrontディストリビューションを作成する
+    const distribution = new cloudfront.CloudFrontWebDistribution(this, 'cdk-test-cloudfront', {
+      defaultRootObject: 'test.png',
+      viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+      httpVersion: cloudfront.HttpVersion.HTTP2,
+      originConfigs: [
+        {
+          s3OriginSource: {
+            s3BucketSource: originBucket,
+            originAccessIdentity: oai
+          },
+          behaviors: [
+            {
+              isDefaultBehavior: true,
+              compress: true,
+              minTtl: cdk.Duration.seconds(0),
+              maxTtl: cdk.Duration.days(365),
+              defaultTtl: cdk.Duration.days(1),
+            }
+          ]
+        }
+      ]
     })
     new s3deploy.BucketDeployment(this, 'deploy-image', {
       sources: [s3deploy.Source.asset('./s3')],
-      destinationBucket: sourceBucket
-    })
-    // // CloudFront で設定する オリジンアクセスアイデンティティ を作成する
-    // const oai = new cloudfront.CfnCloudFrontOriginAccessIdentity(this, 'test-oai', {
-    //   cloudFrontOriginAccessIdentityConfig: {
-    //     comment: 's3 access.',
-    //   }
-    // })
-    // // S3バケットポリシーで、CloudFrontのオリジンアクセスアイデンティティを許可する
-    // const policy = new iam.PolicyStatement({
-    //   effect: iam.Effect.ALLOW,
-    //   actions: ['s3:GetObject'],
-    //   principals: [new iam.CanonicalUserPrincipal(oai.attrS3CanonicalUserId)],
-    //   resources: [
-    //     sourceBucket.bucketArn + '/*'
-    //   ]
-    // })
-    // sourceBucket.addToResourcePolicy(policy)
-
-    new cloudfront.CfnDistribution(this, 'distribution', {
-      distributionConfig: {
-        enabled: true,
-        comment: 'cdk cloudfront test',
-        origins: [
-          {
-            domainName: sourceBucket.bucketDomainName,
-            id: 'image-distribution',
-            s3OriginConfig: {
-              // originAccessIdentity: 'origin-access-identity/cloudfront/' + oai.attrS3CanonicalUserId
-            }
-          }
-        ],
-        defaultCacheBehavior: {
-          forwardedValues: {
-            queryString: true
-          },
-          targetOriginId: 'image-distribution',
-          viewerProtocolPolicy: 'redirect-to-https',
-          // defaultTtl: 86400,
-          // minTtl: 0,
-          // maxTtl: 31536000
-        }
-      }
+      destinationBucket: originBucket
     })
   }
 }
