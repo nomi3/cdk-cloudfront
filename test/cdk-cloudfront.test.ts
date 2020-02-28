@@ -1,10 +1,10 @@
 import { expect as expectCDK, matchTemplate, MatchStyle } from '@aws-cdk/assert';
 import * as cdk from '@aws-cdk/core';
-import lowRevelConstruct = require('../lib/low-revel-construct');
+import lowLevelConstruct = require('../lib/low-level-construct');
 
 test('Empty Stack', () => {
     const app = new cdk.App();
     // WHEN
-    const stack = new lowRevelConstruct.lowRevelConstruct(app, 'MyTestStack');
+    const stack = new lowLevelConstruct.lowLevelConstruct(app, 'MyTestStack');
     // THEN
 });
